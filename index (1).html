@@ -1,0 +1,246 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Matrix Multiplier</title>
+    <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/babel-standalone@7.22.5/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gradient-to-br from-indigo-900 via-purple-800 to-pink-700 min-h-screen flex items-center justify-center p-4">
+    <div id="root"></div>
+    <script type="text/babel">
+        const MatrixInput = ({ rows, cols, matrix, onChange, label }) => {
+            return (
+                <div className="bg-white bg-opacity-20 backdrop-blur-lg rounded-lg p-6 shadow-lg">
+                    <h2 className="text-xl font-bold text-white mb-4">{label}</h2>
+                    <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
+                        {matrix.map((row, i) =>
+                            row.map((val, j) => (
+                                <input
+                                    key={`${i}-${j}`}
+                                    type="number"
+                                    value={val}
+                                    onChange={(e) => onChange(i, j, e.target.value)}
+                                    className="w-16 p-2 text-center bg-white bg-opacity-30 text-white placeholder-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-pink-400"
+                                    placeholder="0"
+                                />
+                            ))
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        const App = () => {
+            const [matrixA, setMatrixA] = React.useState([[0, 0], [0, 0]]);
+            const [matrixB, setMatrixB] = React.useState([[0, 0], [0, 0]]);
+            const [result, setResult] = React.useState(null);
+            const [rowsA, setRowsA] = React.useState(2);
+            const [colsA, setColsA] = React.useState(2);
+            const [rowsB, setRowsB] = React.useState(2);
+            const [colsB, setColsB] = React.useState(2);
+            const [error, setError] = React.useState('');
+
+            const updateMatrixA = (i, j, value) => {
+                const newMatrix = [...matrixA];
+                newMatrix[i][j] = parseFloat(value) || 0;
+                setMatrixA(newMatrix);
+            };
+
+            const updateMatrixB = (i, j, value) => {
+                const newMatrix = [...matrixB];
+                newMatrix[i][j] = parseFloat(value) || 0;
+                setMatrixB(newMatrix);
+            };
+
+            const handleRowsAChange = (e) => {
+                const newRows = parseInt(e.target.value) || 1;
+                setRowsA(newRows);
+                setMatrixA(Array(newRows).fill().map((_, i) => Array(colsA).fill(0)));
+            };
+
+            const handleColsAChange = (e) => {
+                const newCols = parseInt(e.target.value) || 1;
+                setColsA(newCols);
+                setMatrixA(Array(rowsA).fill().map((_, i) => Array(newCols).fill(0)));
+                setRowsB(newCols); // Ensure matrix B rows match matrix A columns
+                setMatrixB(Array(newCols).fill().map((_, i) => Array(colsB).fill(0)));
+            };
+
+            const handleRowsBChange = (e) => {
+                const newRows = parseInt(e.target.value) || 1;
+                setRowsB(newRows);
+                setMatrixB(Array(newRows).fill().map((_, i) => Array(colsB).fill(0)));
+            };
+
+            const handleColsBChange = (e) => {
+                const newCols = parseInt(e.target.value) || 1;
+                setColsB(newCols);
+                setMatrixB(Array(rowsB).fill().map((_, i) => Array(newCols).fill(0)));
+            };
+
+            const multiplyMatrices = () => {
+                if (colsA !== rowsB) {
+                    setError('Matrix A columns must equal Matrix B rows for multiplication.');
+                    setResult(null);
+                    return;
+                }
+                setError('');
+                const resultMatrix = Array(rowsA).fill().map(() => Array(colsB).fill(0));
+                for (let i = 0; i < rowsA; i++) {
+                    for (let j = 0; j < colsB; j++) {
+                        for (let k = 0; k < colsA; k++) {
+                            resultMatrix[i][j] += matrixA[i][k] * matrixB[k][j];
+                        }
+                    }
+                }
+                setResult(resultMatrix);
+            };
+
+            return (
+                <div className="max-w-4xl w-full">
+                    <h1 className="text-4xl font-extrabold text-white text-center mb-8 animate-pulse">
+                        Matrix Multiplier
+                    </h1>
+                    <div className="grid md:grid-cols-2 gap-6">
+                        <div>
+                            <div className="mb-4 flex gap-4">
+                                <div>
+                                    <label className="text-white">Rows A:</label>
+                                    <input
+                                        type="number"
+                                        value={rowsA}
+                                        onChange={handleRowsAChange}
+                                        className="w-20 p-2 ml-2 bg-white bg-opacity-30 text-white rounded"
+                                        min="1"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-white">Cols A:</label>
+                                    <input
+                                        type="number"
+                                        value={colsA}
+                                        onChange={handleColsAChange}
+                                        className="w-20 p-2 ml-2 bg-white bg-opacity-30 text-white rounded"
+                                        min="1"
+                                    />
+                                </div>
+                            </div>
+                            <MatrixInput
+                                rows={rowsA}
+                                cols={colsA}
+                                matrix={matrixA}
+                                onChange={updateMatrixA}
+                                label="Matrix A"
+                            />
+                        </div>
+                        <div>
+                            <div className="mb-4 flex gap-4">
+                                <div>
+                                    <label className="text-white">Rows B:</label>
+                                    <input
+                                        type="number"
+                                        value={rowsB}
+                                        onChange={handleRowsBChange}
+                                        className="w-20 p-2 ml-2 bg-white bg-opacity-30 text-white rounded"
+                                        min="1"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-white">Cols B:</label>
+                                    <input
+                                        type="number"
+                                        value={colsB}
+                                        onChange={handleColsBChange}
+                                        className="w-20 p-2 ml-2 bg-white bg-opacity-30 text-white rounded"
+                                        min="1"
+                                    />
+                                </div>
+                            </div>
+                            <MatrixInput
+                                rows={rowsB}
+                                cols={colsB}
+                                matrix={matrixB}
+                                onChange={updateMatrixB}
+                                label="Matrix B"
+                            />
+                        </div>
+                    </div>
+                    <div className="text-center mt-6">
+                        <button
+                            onClick={multiplyMatrices}
+                            className="bg-pink-500 text-white px-6 py-3 rounded-full hover:bg-pink-600 transition duration-300 transform hover:scale-105"
+                        >
+                            Multiply Matrices
+                        </button>
+                    </div>
+                    {error && (
+                        <div className="mt-4 text-red-300 text-center">{error}</div>
+                    )}
+                    {result && (
+                        <div className="mt-6 bg-white bg-opacity-20 backdrop-blur-lg rounded-lg p-6">
+                            <h2 className="text-xl font-bold text-white mb-4">Result</h2>
+                            <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${colsB}, minmax(0, 1fr))` }}>
+                                {result.map((row, i) =>
+                                    row.map((val, j) => (
+                                        <div
+                                            key={`${i}-${j}`}
+                                            className="w-16 p-2 text-center bg-white bg-opacity-30 text-white rounded"
+                                        >
+                                            {val}
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+</body>
+</html>
